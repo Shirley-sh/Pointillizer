@@ -50,6 +50,7 @@
 			void main()	{
 
 				vUv = uv;
+				vUv.x = 1.-vUv.x;
 
 				gl_Position = vec4( position, 1.0 );
 
