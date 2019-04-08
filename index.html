@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Pointillizer [Shirley Huang]</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #ffffff;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+
+				background-color: #eeeeee;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+
+			a { color: #ffffff; }
+
+			#container{
+				margin-top: 10vh;
+			}
+
+
+
+
+		</style>
+	</head>
+	<body>
+
+		<div id="container"></div>
+		<video id="video" autoplay style="display:none"></video>
+
+		<script src="js/three.js"></script>
+
+		<script src="js/WebGL.js"></script>
+
+		<script id="vertexShader" type="x-shader/x-vertex">
+
+			varying vec2 vUv;
+
+			void main()	{
+
+				vUv = uv;
+
+				gl_Position = vec4( position, 1.0 );
+
+			}
+
+		</script>
+
+		<script id="fragmentShader" type="x-shader/x-fragment">
+
+			varying vec2 vUv;
+
+			uniform float time;
+			uniform sampler2D tex;
+			uniform vec2 resolution;
+
+			vec2 random2( vec2 p ) {
+			    return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);
+			}
+
+			void main()	{
+				float dotSizeMax = 0.7;
+			    float dotSizeMin = 0.1;
+
+			    vec2 st = vUv;
+			    vec2 uv = st;
+
+
+			    float scale = 150.;
+			    // Scale
+			    st *= scale;
+			    st.y *= resolution.y/resolution.x;
+
+			    // Tile the space
+			    vec2 i_st = floor(st);
+			    vec2 f_st = fract(st);
+
+			    vec3 grayXfer = vec3(0.3, 0.59, 0.11);
+
+			//------------------------Pass 1--------------------
+			    float m_dist = 1.;  // minimun distance
+			    vec2 samplePoint = vec2(0.);
+			    vec2 ij = vec2(.0);
+			    for (int y= -1; y <= 1; y++) {
+			        for (int x= -1; x <= 1; x++) {
+			            // Neighbor place in the grid
+			            vec2 neighbor = vec2(float(x),float(y));
+
+			            // Random position from current + neighbor place in the grid
+			            vec2 point = random2(i_st + neighbor);
+
+						// Animate the point
+			            point = 1. + 0.25*sin(time*3. + 6.2831*point);
+
+						// Vector between the pixel and the point
+			            vec2 diff = neighbor + point - f_st;
+
+			            // Distance to the point
+			            float dist = length(diff);
+
+			            // Keep the closer distance
+			            if(m_dist>dist){
+			                samplePoint = point;
+			                ij = vec2(x,y)*0.5;
+			            }
+			            m_dist = min(m_dist, dist);
+			        }
+			    }
+
+			    float sampleU = floor(samplePoint.x*ij.x+uv.x*scale)/scale;
+				float sampleV = floor(samplePoint.y*ij.y+uv.y*scale*resolution.y/resolution.x)/(scale*resolution.y/resolution.x);	
+				vec2 sampleUv = vec2(sampleU, sampleV);
+			    vec3 color = texture2D(tex,sampleUv).xyz + vec3(samplePoint,(samplePoint.x+samplePoint.y)*0.5)*0.3;
+			    vec3 gray = vec3(dot(grayXfer, color));
+			    gray = step(m_dist,(1.-gray)*dotSizeMax+dotSizeMin);
+			    vec3 pass1 = gray*color+(1.-gray);	
+
+			//------------------------Pass 2--------------------
+			    m_dist = 1.;  // minimun distance
+			    samplePoint = vec2(0.);
+			    ij = vec2(.0);
+			    for (int y= -1; y <= 1; y++) {
+			        for (int x= -1; x <= 1; x++) {
+			            // Neighbor place in the grid
+			            vec2 neighbor = vec2(float(x),float(y));
+
+			            // Random position from current + neighbor place in the grid
+			            vec2 point = random2(i_st + neighbor);
+
+						// Animate the point
+			            point = 0.5 + 0.25*sin(time*3. + 13.2831*point);
+
+						// Vector between the pixel and the point
+			            vec2 diff = neighbor + point - f_st;
+
+			            // Distance to the point
+			            float dist = length(diff);
+
+			            // Keep the closer distance
+			            if(m_dist>dist){
+			                samplePoint = point;
+			                ij = vec2(x,y)*0.5;
+			            }
+			            m_dist = min(m_dist, dist);
+			        }
+			    }
+
+			    sampleU = floor(samplePoint.x*ij.x+uv.x*scale)/scale;
+				sampleV = floor(samplePoint.y*ij.y+uv.y*scale*resolution.y/resolution.x)/(scale*resolution.y/resolution.x);	
+				sampleUv = vec2(sampleU, sampleV);
+			    color = texture2D(tex,sampleUv).xyz + vec3(samplePoint,(samplePoint.x+samplePoint.y)*0.5)*0.3;
+			    gray = vec3(dot(grayXfer, color));
+			    gray = step(m_dist,(1.-gray)*dotSizeMax+dotSizeMin);
+			    vec3 pass2 = gray*color+(1.-gray);
+
+
+
+			    gl_FragColor = vec4(min(pass1,pass2),1);
+
+			}
+
+		</script>
+
+		<script>
+
+			if ( WEBGL.isWebGLAvailable() === false ) {
+
+				document.body.appendChild( WEBGL.getWebGLErrorMessage() );
+
+			}
+
+
+
+			var container;
+
+			var camera, scene, renderer,video;
+
+			var uniforms;
+
+			init();
+			animate();
+
+			function init() {
+
+				container = document.getElementById( 'container' );
+
+				camera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0, 1 );
+
+				scene = new THREE.Scene();
+
+				video = document.getElementById( 'video' );
+				var texture = new THREE.VideoTexture( video );
+
+
+				var geometry = new THREE.PlaneBufferGeometry( 2, 2 );
+
+				var textureLoader = new THREE.TextureLoader();
+
+				uniforms = {
+					"time": { value: 1.0 },
+					"tex": { value: texture },
+					"resolution": { value: new THREE.Vector2( 1280.0, 720.0 ) },
+				};
+
+				var material = new THREE.ShaderMaterial( {
+
+					uniforms: uniforms,
+					vertexShader: document.getElementById( 'vertexShader' ).textContent,
+					fragmentShader: document.getElementById( 'fragmentShader' ).textContent
+
+				} );
+
+				var mesh = new THREE.Mesh( geometry, material );
+				scene.add( mesh );
+
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				container.appendChild( renderer.domElement );
+
+				onWindowResize();
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
+				if ( navigator.mediaDevices && navigator.mediaDevices.getUserMedia ) {
+					var constraints = { video: { width: 1280, height: 720, facingMode: 'user' } };
+					navigator.mediaDevices.getUserMedia( constraints ).then( function ( stream ) {
+						// apply the stream to the video element used in the texture
+						video.srcObject = stream;
+						video.play();
+					} ).catch( function ( error ) {
+						console.error( 'Unable to access the camera/webcam.', error );
+					} );
+				} else {
+					console.error( 'MediaDevices interface not available.' );
+				}
+
+			}
+
+			function onWindowResize() {
+
+				// renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.setSize( window.innerWidth*0.75, video.videoHeight/(video.videoWidth)*window.innerWidth*0.75 );
+
+			}
+
+			
+
+			function animate( timestamp ) {
+
+				requestAnimationFrame( animate );
+
+				uniforms[ "time" ].value = timestamp / 1000;
+
+				renderer.render( scene, camera );
+
+				renderer.setSize( window.innerWidth*0.75, video.videoHeight/(video.videoWidth)*window.innerWidth*0.75 );
+
+			}
+
+		</script>
+
+	</body>
+</html>
